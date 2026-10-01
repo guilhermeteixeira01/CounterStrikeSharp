@@ -252,6 +252,28 @@ KHook::Action ValveFunction::DispatchHook(bool post, DynamicHookContext& hook)
     if (globals::gameThreadId != std::this_thread::get_id()) return KHook::Action::Ignore;
     if (post && KHook::WasOriginalFunctionSkipped()) return KHook::Action::Ignore;
 
+    // A callback that re-enters its own hooked function (directly, or through
+    // engine side effects such as bot team balancing during ChangeTeam/SetPawn)
+    // recurses until the stack overflows. Past a sane depth, let the original
+    // run without managed callbacks so the chain unwinds instead of crashing.
+    constexpr int kMaxDispatchDepth = 32;
+    if (m_dispatchDepth >= kMaxDispatchDepth)
+    {
+        if (!m_reportedRecursion)
+        {
+            m_reportedRecursion = true;
+            CSSHARP_CORE_ERROR("Hook on function {} re-entered itself {} times from its own callbacks; skipping nested callbacks to "
+                               "avoid a stack overflow. Check for plugins calling this function from inside its hook.",
+                               m_ulAddr, kMaxDispatchDepth);
+        }
+        return KHook::Action::Ignore;
+    }
+    struct DepthGuard
+    {
+        int& depth;
+        ~DepthGuard() { --depth; }
+    } depthGuard{ ++m_dispatchDepth };
+
     auto* callback = post ? m_postcallback : m_precallback;
     auto nativeCallback = m_callback;
     HookResult result = HookResult::Continue;

@@ -92,6 +92,9 @@ class ValveFunction
     std::optional<std::function<HookResult(HookMode, DynamicHookContext&)>> m_callback;
 
     std::unique_ptr<DynamicHook> m_hook;
+    // Nested DispatchHook calls on the game thread; see DispatchHook.
+    int m_dispatchDepth = 0;
+    bool m_reportedRecursion = false;
     void EnsureHook();
     KHook::Action DispatchHook(bool post, DynamicHookContext& hook);
 };
