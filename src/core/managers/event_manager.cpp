@@ -189,6 +189,27 @@ KHook::Return<bool> EventManager::OnFireEvent(IGameEventManager2* hookThis, IGam
     auto it = m_hooksMap.find(pEvent->GetName());
     if (it == m_hooksMap.end()) return { KHook::Action::Ignore };
 
+    // A listener that triggers the event it handles (e.g. forcing a bot's team
+    // from player_team while the game rebalances it back) recurses until the
+    // stack overflows. Past a sane depth, fire the event without listeners.
+    constexpr int kMaxFireEventDepth = 32;
+    if (m_fireEventDepth >= kMaxFireEventDepth)
+    {
+        if (!m_reportedRecursion)
+        {
+            m_reportedRecursion = true;
+            CSSHARP_CORE_ERROR("Event `{}` was fired recursively {} times from its own listeners; skipping nested listeners to avoid a "
+                               "stack overflow. Check for plugins triggering this event from inside its handler.",
+                               pEvent->GetName(), kMaxFireEventDepth);
+        }
+        return { KHook::Action::Ignore };
+    }
+    struct DepthGuard
+    {
+        int& depth;
+        ~DepthGuard() { --depth; }
+    } depthGuard{ ++m_fireEventDepth };
+
     auto* eventHook = it->second;
     EventOverride override = { bDontBroadcast };
     bool blocked = false;

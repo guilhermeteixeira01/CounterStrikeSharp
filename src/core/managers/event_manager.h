@@ -104,6 +104,10 @@ class EventManager : public IGameEventListener2, public GlobalClass
     std::map<std::string, EventHook*> m_hooksMap;
 
     std::stack<PendingEventHook> m_PendingHooks;
+
+    // Nested OnFireEvent calls with managed listeners; see OnFireEvent.
+    int m_fireEventDepth = 0;
+    bool m_reportedRecursion = false;
 };
 
 } // namespace counterstrikesharp
